@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/30287/.claude/skills/brainstorming/**)",
+      "Bash(scripts\\\\start-server.sh --project-dir \"d:\\\\dreams\\\\upfiles\")",
+      "Bash(Start-Sleep -Seconds 3)",
+      "Bash(Get-Content \"d:\\\\dreams\\\\upfiles\\\\.superpowers\\\\brainstorm\\\\.server-info\" -ErrorAction SilentlyContinue)",
+      "Bash(\"C:/Users/30287/.claude/skills/brainstorming/scripts/start-server.sh\" --project-dir \"d:/dreams/upfiles\")",
+      "Bash(uv sync *)",
+      "Bash(uv run *)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s http://localhost:8000/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"123456\"}')",
+      "Bash(curl -s -I http://localhost:3000/uploads/634eb05f6d63c4e2c203205a2cb83db5.md)",
+      "Bash(python -m json.tool)",
+      "Bash(mv \"d:/dreams/upfiles/backend/uploads/\"* \"d:/dreams/upfiles/uploads/\" 2>/dev/null; ls -la \"d:/dreams/upfiles/uploads/\")",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git rm *)"
+    ],
+    "additionalDirectories": [
+      "d:\\dreams\\upfiles\\backend\\uploads"
+    ]
+  }
+}

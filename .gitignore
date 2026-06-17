@@ -1,0 +1,48 @@
+# 依赖
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+.venv/
+.python-version
+
+# 构建产物
+.next/
+out/
+build/
+dist/
+
+# 上传文件
+uploads/*
+!uploads/.gitkeep
+chunks/*
+!chunks/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# 日志
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+
+# Claude Code 配置
+.claude/
+.superpowers/
+
+# UV 锁文件（可选，如果你想提交可以移除这行）
+backend/uv.lock
