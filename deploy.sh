@@ -22,7 +22,7 @@ if [ "$FORCE_BUILD" = "true" ] || ! docker image inspect big_files_backend:lates
     echo "🔨 首次构建或强制构建镜像..."
     docker-compose build --no-cache
 else
-    echo "✅ 镜像已存在，跳过构建（如需重建请运行: ./deploy.sh true）"
+    echo "✅ 镜像已存在，跳过构建"
 fi
 
 # 停止旧容器
@@ -86,13 +86,20 @@ EOF
 
 echo "✅ 数据库表创建完成"
 
-# 插入默认用户
+# 删除旧用户（如果存在）
+docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "DELETE FROM users WHERE username='admin';" || true
+
+# 使用 Python 生成正确的哈希并插入用户
 echo "👤 创建默认用户..."
-docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "INSERT IGNORE INTO users (username, password_hash) VALUES ('admin', '\$2b\$12\$3xeKaoYtwKm/vtbWM0TK5O/Y/tYOQpi.UqvLDuV9LA1f3B3xEEBcq');"
+HASH=$(docker-compose exec -T backend python -c "from passlib.context import CryptContext; pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto'); print(pwd_context.hash('123456'))" 2>/dev/null | tr -d '\r')
+echo "生成的哈希: $HASH"
+
+# 插入用户
+docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "INSERT INTO users (username, password_hash) VALUES ('admin', '$HASH');"
 
 # 验证用户
 echo "🔍 验证用户..."
-docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "SELECT id, username FROM users;"
+docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "SELECT id, username, LEFT(password_hash, 20) as hash_prefix FROM users;"
 
 echo "✅ 数据库初始化完成"
 
