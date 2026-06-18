@@ -14,10 +14,20 @@ git fetch origin
 git reset --hard origin/main
 git clean -fd
 
-# 停止旧容器并删除旧数据
+# 检查是否需要重新构建镜像
+FORCE_BUILD=${1:-false}
+
+# 检查镜像是否存在
+if [ "$FORCE_BUILD" = "true" ] || ! docker image inspect big_files_backend:latest > /dev/null 2>&1; then
+    echo "🔨 首次构建或强制构建镜像..."
+    docker-compose build --no-cache
+else
+    echo "✅ 镜像已存在，跳过构建（如需重建请运行: ./deploy.sh true）"
+fi
+
+# 停止旧容器
 echo "⏹️  停止旧容器..."
-docker-compose down -v
-docker image prune -f
+docker-compose down
 
 # 启动 MySQL 并等待就绪
 echo "🗄️  启动 MySQL..."
@@ -76,20 +86,17 @@ EOF
 
 echo "✅ 数据库表创建完成"
 
-# 插入默认用户（使用 heredoc 避免转义问题）
+# 插入默认用户
 echo "👤 创建默认用户..."
 docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "INSERT IGNORE INTO users (username, password_hash) VALUES ('admin', '\$2b\$12\$3xeKaoYtwKm/vtbWM0TK5O/Y/tYOQpi.UqvLDuV9LA1f3B3xEEBcq');"
 
-# 验证用户是否创建成功
+# 验证用户
 echo "🔍 验证用户..."
 docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "SELECT id, username FROM users;"
 
 echo "✅ 数据库初始化完成"
 
-# 重新构建并启动所有服务
-echo "🔨 重新构建镜像..."
-docker-compose build --no-cache
-
+# 启动所有服务
 echo "🔨 启动所有服务..."
 docker-compose up -d
 
