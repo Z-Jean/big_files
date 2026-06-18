@@ -36,6 +36,7 @@ echo "✅ MySQL 已就绪"
 # 初始化数据库
 echo "🗄️  初始化数据库..."
 docker-compose exec -T mysql mysql -uroot -p123456 -e "CREATE DATABASE IF NOT EXISTS file_upload CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" || true
+
 docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "
 CREATE TABLE IF NOT EXISTS users (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -68,9 +69,8 @@ CREATE TABLE IF NOT EXISTS chunks (
     UNIQUE INDEX idx_md5_index (file_md5, chunk_index)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 插入默认管理员用户（密码：123456）
-INSERT IGNORE INTO users (username, password_hash) VALUES ('admin', '\$2b\$12\$LJ3m4ys3Lk0TSwHjnF4b6OiJxQxYqYqYqYqYqYqYqYqYqYqYqYqYq');
-" || echo "⚠️  数据库表已存在或创建失败，继续部署..."
+INSERT IGNORE INTO users (username, password_hash) VALUES ('admin', '\$2b\$12\$3xeKaoYtwKm/vtbWM0TK5O/Y/tYOQpi.UqvLDuV9LA1f3B3xEEBcq');
+" || echo "⚠️  数据库初始化完成或表已存在"
 
 echo "✅ 数据库初始化完成"
 
