@@ -14,9 +14,9 @@ git fetch origin
 git reset --hard origin/main
 git clean -fd
 
-# 停止旧容器并删除旧镜像
+# 停止旧容器并删除旧数据
 echo "⏹️  停止旧容器..."
-docker-compose down
+docker-compose down -v
 docker image prune -f
 
 # 启动 MySQL 并等待就绪
@@ -36,9 +36,12 @@ echo "✅ MySQL 已就绪"
 
 # 初始化数据库
 echo "🗄️  初始化数据库..."
+
+# 创建数据库
 docker-compose exec -T mysql mysql -uroot -p123456 -e "CREATE DATABASE IF NOT EXISTS file_upload CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" || true
 
-docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "
+# 创建表
+docker-compose exec -T mysql mysql -uroot -p123456 file_upload << 'EOF'
 CREATE TABLE IF NOT EXISTS users (
     id INT PRIMARY KEY AUTO_INCREMENT,
     username VARCHAR(50) UNIQUE NOT NULL,
@@ -69,15 +72,23 @@ CREATE TABLE IF NOT EXISTS chunks (
     INDEX idx_file_md5 (file_md5),
     UNIQUE INDEX idx_md5_index (file_md5, chunk_index)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+EOF
 
-INSERT IGNORE INTO users (username, password_hash) VALUES ('admin', '\$2b\$12\$3xeKaoYtwKm/vtbWM0TK5O/Y/tYOQpi.UqvLDuV9LA1f3B3xEEBcq');
-" || echo "⚠️  数据库初始化完成或表已存在"
+echo "✅ 数据库表创建完成"
+
+# 插入默认用户（使用 heredoc 避免转义问题）
+echo "👤 创建默认用户..."
+docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "INSERT IGNORE INTO users (username, password_hash) VALUES ('admin', '\$2b\$12\$3xeKaoYtwKm/vtbWM0TK5O/Y/tYOQpi.UqvLDuV9LA1f3B3xEEBcq');"
+
+# 验证用户是否创建成功
+echo "🔍 验证用户..."
+docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "SELECT id, username FROM users;"
 
 echo "✅ 数据库初始化完成"
 
-# 重新构建并启动后端（强制重建镜像）
-echo "🔨 重新构建后端镜像..."
-docker-compose build --no-cache backend
+# 重新构建并启动所有服务
+echo "🔨 重新构建镜像..."
+docker-compose build --no-cache
 
 echo "🔨 启动所有服务..."
 docker-compose up -d
