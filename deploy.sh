@@ -14,9 +14,10 @@ git fetch origin
 git reset --hard origin/main
 git clean -fd
 
-# 停止旧容器
+# 停止旧容器并删除旧镜像
 echo "⏹️  停止旧容器..."
 docker-compose down
+docker image prune -f
 
 # 启动 MySQL 并等待就绪
 echo "🗄️  启动 MySQL..."
@@ -74,9 +75,12 @@ INSERT IGNORE INTO users (username, password_hash) VALUES ('admin', '\$2b\$12\$3
 
 echo "✅ 数据库初始化完成"
 
-# 启动其他服务
-echo "🔨 启动其他服务..."
-docker-compose up -d backend frontend nginx
+# 重新构建并启动后端（强制重建镜像）
+echo "🔨 重新构建后端镜像..."
+docker-compose build --no-cache backend
+
+echo "🔨 启动所有服务..."
+docker-compose up -d
 
 # 等待服务启动
 echo "⏳ 等待服务启动（30秒）..."
