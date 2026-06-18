@@ -99,15 +99,11 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            # 添加 GitHub 到 known_hosts，避免主机密钥验证失败
-            mkdir -p ~/.ssh
-            ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts 2>/dev/null
-
             # 检查项目目录是否存在
             if [ ! -d "/root/big_files" ]; then
               echo "📥 首次部署，克隆仓库..."
               cd /root
-              git clone git@github.com:Z-Jean/big_files.git
+              git clone https://github.com/Z-Jean/big_files.git
               cd big_files
             else
               echo "📥 更新代码..."
