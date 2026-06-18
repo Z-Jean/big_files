@@ -10,18 +10,35 @@ cd /root/big_files
 
 # 拉取最新代码
 echo "📥 拉取最新代码..."
-git pull origin main
+git fetch origin
+git reset --hard origin/main
+git clean -fd
 
 # 停止旧容器
 echo "⏹️  停止旧容器..."
 docker-compose down
 
-# 构建并启动新容器（在服务器上构建，不受 Actions 超时限制）
-echo "🔨 构建并启动容器（首次构建需要 5-10 分钟）..."
-docker-compose up -d --build
+# 启动 MySQL 并等待就绪
+echo "🗄️  启动 MySQL..."
+docker-compose up -d mysql
+echo "⏳ 等待 MySQL 就绪（60秒）..."
+sleep 60
+
+# 检查 MySQL 是否就绪
+echo "🏥 检查 MySQL 状态..."
+docker-compose exec -T mysql mysqladmin ping -h localhost --silent || {
+    echo "❌ MySQL 启动失败"
+    docker-compose logs mysql
+    exit 1
+}
+echo "✅ MySQL 已就绪"
+
+# 启动其他服务
+echo "🔨 启动其他服务..."
+docker-compose up -d backend frontend nginx
 
 # 等待服务启动
-echo "⏳ 等待服务启动..."
+echo "⏳ 等待服务启动（30秒）..."
 sleep 30
 
 # 健康检查
