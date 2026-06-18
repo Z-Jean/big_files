@@ -2,8 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routes import auth, upload, files
-from database import engine, Base
+from database import engine, Base, SessionLocal
 from config import settings
+from models.user import User
+from passlib.context import CryptContext
 import os
 
 app = FastAPI(title="大文件上传系统")
@@ -19,6 +21,29 @@ app.add_middleware(
 
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
+
+# 密码加密上下文
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# 创建默认用户
+def create_default_user():
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "admin").first()
+        if not user:
+            user = User(
+                username="admin",
+                password_hash=pwd_context.hash("123456")
+            )
+            db.add(user)
+            db.commit()
+            print("✅ 默认用户创建成功: admin / 123456")
+        else:
+            print("ℹ️  用户 admin 已存在")
+    finally:
+        db.close()
+
+create_default_user()
 
 # 注册路由
 app.include_router(auth.router, prefix="/api/auth", tags=["认证"])

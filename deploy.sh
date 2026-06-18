@@ -84,26 +84,9 @@ CREATE TABLE IF NOT EXISTS chunks (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 EOF
 
-echo "✅ 数据库表创建完成"
-
-# 删除旧用户（如果存在）
-docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "DELETE FROM users WHERE username='admin';" || true
-
-# 使用 Python 生成正确的哈希并插入用户
-echo "👤 创建默认用户..."
-HASH=$(docker-compose exec -T backend python -c "from passlib.context import CryptContext; pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto'); print(pwd_context.hash('123456'))" 2>/dev/null | tr -d '\r')
-echo "生成的哈希: $HASH"
-
-# 插入用户
-docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "INSERT INTO users (username, password_hash) VALUES ('admin', '$HASH');"
-
-# 验证用户
-echo "🔍 验证用户..."
-docker-compose exec -T mysql mysql -uroot -p123456 file_upload -e "SELECT id, username, LEFT(password_hash, 20) as hash_prefix FROM users;"
-
 echo "✅ 数据库初始化完成"
 
-# 启动所有服务
+# 启动所有服务（后端会自动创建默认用户）
 echo "🔨 启动所有服务..."
 docker-compose up -d
 

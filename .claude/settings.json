@@ -23,7 +23,9 @@
       "Bash(git branch *)",
       "Bash(git push *)",
       "Bash(git commit *)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(ssh root@8.146.205.130 \"cd /root/big_files && docker-compose logs backend --tail=50\")",
+      "Bash(ssh root@8.146.205.130 \"cd /root/big_files && docker-compose logs backend 2>&1 | tail -100\")"
     ],
     "additionalDirectories": [
       "d:\\dreams\\upfiles\\backend\\uploads"
