@@ -3,8 +3,6 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
   # 后端检查
@@ -83,3 +81,36 @@ jobs:
           file: ./Dockerfile.frontend
           push: false
           tags: frontend:test
+
+  # 部署到服务器
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            # 检查项目目录是否存在
+            if [ ! -d "/root/big_files" ]; then
+              echo "📥 首次部署，克隆仓库..."
+              cd /root
+              git clone git@github.com:Z-Jean/big_files.git
+              cd big_files
+            else
+              echo "📥 更新代码..."
+              cd /root/big_files
+              git pull origin main
+            fi
+
+            # 执行部署脚本
+            chmod +x deploy.sh
+            ./deploy.sh

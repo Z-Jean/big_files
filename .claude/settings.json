@@ -17,7 +17,12 @@
       "Bash(mv \"d:/dreams/upfiles/backend/uploads/\"* \"d:/dreams/upfiles/uploads/\" 2>/dev/null; ls -la \"d:/dreams/upfiles/uploads/\")",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(git commit -m 'feat: 初始化大文件分片上传系统 *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(git commit *)"
     ],
     "additionalDirectories": [
       "d:\\dreams\\upfiles\\backend\\uploads"
