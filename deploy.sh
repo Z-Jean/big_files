@@ -16,8 +16,8 @@ git pull origin main
 echo "⏹️  停止旧容器..."
 docker-compose down
 
-# 构建并启动新容器
-echo "🔨 构建并启动容器..."
+# 构建并启动新容器（在服务器上构建，不受 Actions 超时限制）
+echo "🔨 构建并启动容器（首次构建需要 5-10 分钟）..."
 docker-compose up -d --build
 
 # 等待服务启动

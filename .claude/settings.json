@@ -22,7 +22,8 @@
       "Bash(git remote *)",
       "Bash(git branch *)",
       "Bash(git push *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "WebFetch(domain:github.com)"
     ],
     "additionalDirectories": [
       "d:\\dreams\\upfiles\\backend\\uploads"
