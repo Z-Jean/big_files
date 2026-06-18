@@ -80,7 +80,10 @@ jobs:
             else
               echo "📥 更新代码..."
               cd /root/big_files
-              git pull origin main
+              # 丢弃本地修改，强制同步
+              git fetch origin
+              git reset --hard origin/main
+              git clean -fd
             fi
 
             # 执行部署脚本
