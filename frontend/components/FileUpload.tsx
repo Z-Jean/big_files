@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import ProgressBar from './ProgressBar';
 
 interface UploadItem {
@@ -27,6 +27,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isUploadingRef = useRef(false);
 
   // 计算文件 MD5（使用 Web Worker）
   const calculateMD5 = (file: File): Promise<string> => {
@@ -113,7 +114,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   };
 
   // 上传单个分片
-  const uploadChunk = async (chunk: Blob, md5: string, index: number, totalChunks: number) => {
+  const uploadSingleChunk = async (chunk: Blob, md5: string, index: number, totalChunks: number) => {
     abortControllerRef.current = new AbortController();
 
     const formData = new FormData();
@@ -153,44 +154,38 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   };
 
   // 取消上传
-  const cancelUpload = async (md5: string) => {
+  const cancelUploadApi = async (md5: string) => {
     await fetch(`/api/upload/cancel/${md5}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${getToken()}` },
     });
   };
 
-  // 更新队列中某个文件的状态
-  const updateQueueItem = (file: File, updates: Partial<UploadItem>) => {
-    setUploadQueue(prev => {
-      const newQueue = [...prev];
-      const index = prev.findIndex(p => p.file === file);
-      if (index !== -1) {
-        newQueue[index] = { ...newQueue[index], ...updates };
-      }
-      return newQueue;
-    });
-  };
+  // 上传单个文件
+  const uploadFile = useCallback(async (item: UploadItem) => {
+    if (isUploadingRef.current) return;
+    isUploadingRef.current = true;
 
-  // 开始上传单个文件
-  const startUpload = async (item: UploadItem) => {
     const { file, md5, totalChunks, uploadedChunks } = item;
 
-    updateQueueItem(file, { status: 'uploading' });
+    // 更新状态为上传中
+    setUploadQueue(prev => prev.map(i =>
+      i.file === file ? { ...i, status: 'uploading' } : i
+    ));
 
     const startTime = Date.now();
-    let uploadedSize = 0;
+    let uploadedSize = uploadedChunks.length * CHUNK_SIZE;
 
     try {
       for (let i = 0; i < totalChunks; i++) {
         // 跳过已上传的分片
         if (uploadedChunks.includes(i)) {
-          uploadedSize += CHUNK_SIZE;
           continue;
         }
 
         // 检查是否暂停
         if (isPausedRef.current) {
+          isUploadingRef.current = false;
           return;
         }
 
@@ -198,7 +193,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = file.slice(start, end);
 
-        await uploadChunk(chunk, md5, i, totalChunks);
+        await uploadSingleChunk(chunk, md5, i, totalChunks);
 
         uploadedSize += CHUNK_SIZE;
         const progress = Math.min((uploadedSize / file.size) * 100, 100);
@@ -207,46 +202,49 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
         const remainingSize = file.size - uploadedSize;
         const remainingTime = remainingSize / (speed * 1024 * 1024);
 
-        updateQueueItem(file, {
-          currentChunk: i + 1,
-          progress,
-          speed,
-          remainingTime,
-          uploadedChunks: [...uploadedChunks, i],
-        });
+        // 使用函数式更新，避免闭包问题
+        setUploadQueue(prev => prev.map(item =>
+          item.file === file ? {
+            ...item,
+            currentChunk: i + 1,
+            progress,
+            speed,
+            remainingTime,
+            uploadedChunks: [...uploadedChunks, i],
+          } : item
+        ));
       }
 
       // 所有分片上传完成，开始合并
-      updateQueueItem(file, { status: 'merging' });
+      setUploadQueue(prev => prev.map(i =>
+        i.file === file ? { ...i, status: 'merging' } : i
+      ));
 
       await mergeChunks(md5, file.name, totalChunks);
 
-      updateQueueItem(file, { status: 'completed', progress: 100 });
+      setUploadQueue(prev => prev.map(i =>
+        i.file === file ? { ...i, status: 'completed', progress: 100 } : i
+      ));
 
       // 通知父组件刷新文件列表
       onUploadComplete?.();
-
-      // 开始下一个上传
-      startNextUpload();
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
+        isUploadingRef.current = false;
         return;
       }
 
-      updateQueueItem(file, {
-        status: 'error',
-        error: err instanceof Error ? err.message : '上传失败',
-      });
+      setUploadQueue(prev => prev.map(i =>
+        i.file === file ? {
+          ...i,
+          status: 'error',
+          error: err instanceof Error ? err.message : '上传失败',
+        } : i
+      ));
     }
-  };
 
-  // 开始下一个上传
-  const startNextUpload = () => {
-    const nextItem = uploadQueue.find(item => item.status === 'idle' && item.md5);
-    if (nextItem) {
-      startUpload(nextItem);
-    }
-  };
+    isUploadingRef.current = false;
+  }, [onUploadComplete]);
 
   // 处理文件选择（支持多选）
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -282,12 +280,12 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
         const md5 = await calculateMD5(item.file);
         const totalChunks = Math.ceil(item.file.size / CHUNK_SIZE);
 
-        updateQueueItem(item.file, { md5, totalChunks, status: 'idle' });
-
         // 检查是否秒传
         const checkResult = await checkFileExists(md5, item.file.size);
         if (checkResult.exists) {
-          updateQueueItem(item.file, { status: 'completed', progress: 100 });
+          setUploadQueue(prev => prev.map(i =>
+            i.file === item.file ? { ...i, md5, totalChunks, status: 'completed', progress: 100 } : i
+          ));
           continue;
         }
 
@@ -295,17 +293,32 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
         const chunksResult = await getUploadedChunks(md5);
         const uploadedChunks = chunksResult.uploaded_chunks || [];
 
-        updateQueueItem(item.file, { uploadedChunks });
+        setUploadQueue(prev => prev.map(i =>
+          i.file === item.file ? { ...i, md5, totalChunks, uploadedChunks, status: 'idle' } : i
+        ));
       } catch (err) {
-        updateQueueItem(item.file, {
-          status: 'error',
-          error: err instanceof Error ? err.message : '上传失败',
-        });
+        setUploadQueue(prev => prev.map(i =>
+          i.file === item.file ? {
+            ...i,
+            status: 'error',
+            error: err instanceof Error ? err.message : '计算 MD5 失败',
+          } : i
+        ));
       }
     }
 
-    // 开始上传第一个未完成的文件
-    startNextUpload();
+    // 重置文件输入
+    e.target.value = '';
+  };
+
+  // 开始上传
+  const handleStartUpload = () => {
+    if (isUploadingRef.current) return;
+
+    const nextItem = uploadQueue.find(item => item.status === 'idle' && item.md5);
+    if (nextItem) {
+      uploadFile(nextItem);
+    }
   };
 
   // 暂停上传
@@ -319,26 +332,41 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const handleResume = () => {
     isPausedRef.current = false;
     setIsPaused(false);
-    startNextUpload();
+
+    const nextItem = uploadQueue.find(item => item.status === 'paused');
+    if (nextItem) {
+      setUploadQueue(prev => prev.map(i =>
+        i.file === nextItem.file ? { ...i, status: 'uploading' } : i
+      ));
+      uploadFile({ ...nextItem, status: 'uploading' });
+    }
   };
 
   // 取消所有上传
   const handleCancelAll = async () => {
+    isUploadingRef.current = false;
+    isPausedRef.current = false;
+    setIsPaused(false);
+    abortControllerRef.current?.abort();
+
     for (const item of uploadQueue) {
       if (item.md5 && item.status !== 'completed') {
-        await cancelUpload(item.md5);
+        await cancelUploadApi(item.md5);
       }
     }
+
     setUploadQueue([]);
-    setIsPaused(false);
-    isPausedRef.current = false;
   };
 
-  // 获取当前正在上传的文件
-  const currentUploading = uploadQueue.find(item => item.status === 'uploading' || item.status === 'paused');
+  // 清除已完成的文件
+  const handleClearCompleted = () => {
+    setUploadQueue(prev => prev.filter(item => item.status !== 'completed'));
+  };
+
   const hasUploading = uploadQueue.some(item => item.status === 'uploading');
   const hasPaused = uploadQueue.some(item => item.status === 'paused');
   const hasIdle = uploadQueue.some(item => item.status === 'idle' && item.md5);
+  const hasCompleted = uploadQueue.some(item => item.status === 'completed');
 
   return (
     <div>
@@ -367,26 +395,32 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
       {uploadQueue.length > 0 && (
         <div className="mb-4 space-y-3">
           {uploadQueue.map((item, index) => (
-            <div key={index} className="border rounded-lg p-3">
+            <div key={`${item.file.name}-${index}`} className="border rounded-lg p-3">
               <div className="flex justify-between items-center mb-2">
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{item.file.name}</p>
                   <p className="text-sm text-gray-500">
                     {(item.file.size / 1024 / 1024).toFixed(2)} MB
                   </p>
                 </div>
-                <div className="ml-4">
+                <div className="ml-4 flex-shrink-0">
                   {item.status === 'completed' && (
                     <span className="text-green-600">✅ 完成</span>
                   )}
                   {item.status === 'error' && (
-                    <span className="text-red-600">❌ {item.error}</span>
+                    <span className="text-red-600 text-sm">❌ {item.error}</span>
                   )}
                   {item.status === 'calculating' && (
                     <span className="text-blue-600">⏳ 计算中...</span>
                   )}
                   {item.status === 'merging' && (
                     <span className="text-blue-600">⏳ 合并中...</span>
+                  )}
+                  {item.status === 'uploading' && (
+                    <span className="text-blue-600">⬆️ 上传中...</span>
+                  )}
+                  {item.status === 'paused' && (
+                    <span className="text-yellow-600">⏸️ 暂停</span>
                   )}
                 </div>
               </div>
@@ -411,43 +445,52 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
       )}
 
       {/* 控制按钮 */}
-      <div className="flex gap-4">
-        {hasIdle && !hasUploading && (
-          <button
-            onClick={startNextUpload}
-            className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
-          >
-            开始上传
-          </button>
-        )}
+      {uploadQueue.length > 0 && (
+        <div className="flex gap-4">
+          {hasIdle && !hasUploading && (
+            <button
+              onClick={handleStartUpload}
+              className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
+            >
+              开始上传
+            </button>
+          )}
 
-        {hasUploading && (
-          <button
-            onClick={handlePause}
-            className="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600"
-          >
-            暂停
-          </button>
-        )}
+          {hasUploading && !hasPaused && (
+            <button
+              onClick={handlePause}
+              className="bg-yellow-500 text-white px-4 py-2 rounded-md hover:bg-yellow-600"
+            >
+              暂停
+            </button>
+          )}
 
-        {hasPaused && (
-          <button
-            onClick={handleResume}
-            className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
-          >
-            继续
-          </button>
-        )}
+          {hasPaused && (
+            <button
+              onClick={handleResume}
+              className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+            >
+              继续
+            </button>
+          )}
 
-        {uploadQueue.length > 0 && (
           <button
             onClick={handleCancelAll}
             className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
           >
             取消全部
           </button>
-        )}
-      </div>
+
+          {hasCompleted && (
+            <button
+              onClick={handleClearCompleted}
+              className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+            >
+              清除已完成
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
