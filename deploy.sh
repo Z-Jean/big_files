@@ -14,20 +14,14 @@ git fetch origin
 git reset --hard origin/main
 git clean -fd
 
-# 检查是否需要重新构建镜像
-FORCE_BUILD=${1:-false}
-
-# 检查镜像是否存在
-if [ "$FORCE_BUILD" = "true" ] || ! docker image inspect big_files_backend:latest > /dev/null 2>&1; then
-    echo "🔨 首次构建或强制构建镜像..."
-    docker-compose build --no-cache
-else
-    echo "✅ 镜像已存在，跳过构建"
-fi
-
-# 停止旧容器
+# 停止旧容器并清理旧镜像
 echo "⏹️  停止旧容器..."
 docker-compose down
+docker image prune -f
+
+# 强制重建所有镜像（确保使用最新代码）
+echo "🔨 强制重建所有镜像..."
+docker-compose build --no-cache
 
 # 启动 MySQL 并等待就绪
 echo "🗄️  启动 MySQL..."
