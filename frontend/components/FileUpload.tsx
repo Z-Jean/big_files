@@ -163,9 +163,6 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
 
   // 上传单个文件
   const uploadFile = useCallback(async (item: UploadItem) => {
-    if (isUploadingRef.current) return;
-    isUploadingRef.current = true;
-
     const { file, md5, totalChunks, uploadedChunks } = item;
 
     // 更新状态为上传中
@@ -185,7 +182,9 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
 
         // 检查是否暂停
         if (isPausedRef.current) {
-          isUploadingRef.current = false;
+          setUploadQueue(prev => prev.map(i =>
+            i.file === file ? { ...i, status: 'paused' } : i
+          ));
           return;
         }
 
@@ -202,7 +201,6 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
         const remainingSize = file.size - uploadedSize;
         const remainingTime = remainingSize / (speed * 1024 * 1024);
 
-        // 使用函数式更新，避免闭包问题
         setUploadQueue(prev => prev.map(item =>
           item.file === file ? {
             ...item,
@@ -230,7 +228,6 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
       onUploadComplete?.();
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        isUploadingRef.current = false;
         return;
       }
 
@@ -242,9 +239,43 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
         } : i
       ));
     }
+  }, [onUploadComplete]);
+
+  // 上传所有待上传的文件
+  const uploadAllFiles = useCallback(async () => {
+    if (isUploadingRef.current) return;
+    isUploadingRef.current = true;
+    isPausedRef.current = false;
+    setIsPaused(false);
+
+    // 循环上传所有待上传的文件
+    while (true) {
+      // 检查是否暂停
+      if (isPausedRef.current) {
+        break;
+      }
+
+      // 获取下一个待上传的文件
+      const currentQueue = await new Promise<UploadItem[]>(resolve => {
+        setUploadQueue(prev => {
+          resolve([...prev]);
+          return prev;
+        });
+      });
+
+      const nextItem = currentQueue.find(item => item.status === 'idle' && item.md5);
+
+      if (!nextItem) {
+        // 没有待上传的文件，退出循环
+        break;
+      }
+
+      // 上传这个文件
+      await uploadFile(nextItem);
+    }
 
     isUploadingRef.current = false;
-  }, [onUploadComplete]);
+  }, [uploadFile]);
 
   // 处理文件选择（支持多选）
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -311,14 +342,9 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
     e.target.value = '';
   };
 
-  // 开始上传
+  // 开始上传所有文件
   const handleStartUpload = () => {
-    if (isUploadingRef.current) return;
-
-    const nextItem = uploadQueue.find(item => item.status === 'idle' && item.md5);
-    if (nextItem) {
-      uploadFile(nextItem);
-    }
+    uploadAllFiles();
   };
 
   // 暂停上传
@@ -330,16 +356,18 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
 
   // 继续上传
   const handleResume = () => {
+    // 将暂停状态的文件改为 idle，以便继续上传
+    setUploadQueue(prev => prev.map(i =>
+      i.status === 'paused' ? { ...i, status: 'idle' } : i
+    ));
+
     isPausedRef.current = false;
     setIsPaused(false);
 
-    const nextItem = uploadQueue.find(item => item.status === 'paused');
-    if (nextItem) {
-      setUploadQueue(prev => prev.map(i =>
-        i.file === nextItem.file ? { ...i, status: 'uploading' } : i
-      ));
-      uploadFile({ ...nextItem, status: 'uploading' });
-    }
+    // 启动上传
+    setTimeout(() => {
+      uploadAllFiles();
+    }, 100);
   };
 
   // 取消所有上传
@@ -367,6 +395,14 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const hasPaused = uploadQueue.some(item => item.status === 'paused');
   const hasIdle = uploadQueue.some(item => item.status === 'idle' && item.md5);
   const hasCompleted = uploadQueue.some(item => item.status === 'completed');
+  const hasProcessing = uploadQueue.some(item =>
+    item.status === 'calculating' || item.status === 'merging'
+  );
+
+  // 检查是否所有文件都已完成
+  const allCompleted = uploadQueue.length > 0 && uploadQueue.every(item =>
+    item.status === 'completed' || item.status === 'error'
+  );
 
   return (
     <div>
@@ -447,7 +483,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
       {/* 控制按钮 */}
       {uploadQueue.length > 0 && (
         <div className="flex gap-4">
-          {hasIdle && !hasUploading && (
+          {hasIdle && !hasUploading && !hasProcessing && (
             <button
               onClick={handleStartUpload}
               className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
@@ -474,17 +510,19 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
             </button>
           )}
 
-          <button
-            onClick={handleCancelAll}
-            className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
-          >
-            取消全部
-          </button>
+          {!allCompleted && (
+            <button
+              onClick={handleCancelAll}
+              className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
+            >
+              取消全部
+            </button>
+          )}
 
-          {hasCompleted && (
+          {allCompleted && (
             <button
               onClick={handleClearCompleted}
-              className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
+              className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
             >
               清除已完成
             </button>
