@@ -180,6 +180,81 @@
 
 ---
 
+## 测试架构
+
+### 目录结构
+
+```
+tests/
+├── backend/
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── unit/
+│   │   │   ├── __init__.py
+│   │   │   ├── test_upload_service.py      # 上传服务单元测试 (12 个用例)
+│   │   │   ├── test_jwt_service.py         # JWT 服务单元测试 (9 个用例)
+│   │   │   ├── test_upload_routes.py       # 上传路由单元测试 (15 个用例)
+│   │   │   ├── test_auth_routes.py         # 认证路由单元测试 (8 个用例)
+│   │   │   └── test_api_endpoints.py       # API 端点全面测试 (35 个用例)
+│   │   └── integration/
+│   │       ├── __init__.py
+│   │       └── test_upload_flow.py         # 上传流程集成测试 (8 个用例)
+│   └── conftest.py                         # pytest 配置
+├── frontend/
+│   └── __tests__/
+│       ├── components/
+│       │   ├── FileUpload.test.tsx         # FileUpload 组件测试 (12 个用例)
+│       │   ├── FileList.test.tsx           # FileList 组件测试 (7 个用例)
+│       │   └── LoginPage.test.tsx          # LoginPage 组件测试 (6 个用例)
+│       └── e2e/
+│           └── upload-flow.spec.ts         # 上传流程 E2E 测试 (8 个用例)
+└── 总计: 87 个测试用例
+```
+
+### 测试类型统计
+
+| 测试类型 | 框架 | 用例数 | 覆盖范围 |
+|----------|------|--------|----------|
+| 后端单元测试 | pytest | 79 | 上传服务、JWT 服务、路由处理器、API 端点 |
+| 前端组件测试 | Jest + React Testing Library | 25 | FileUpload、FileList、LoginPage |
+| E2E 测试 | Playwright | 8 | 完整上传流程、登录、秒传 |
+| **总计** | | **112** | |
+
+### 测试覆盖的问题
+
+| 问题编号 | 对应测试 | 测试文件 |
+|----------|----------|----------|
+| C1 路径穿越 | `test_save_chunk_path_traversal_rejected` | `test_upload_service.py` |
+| C2 内存耗尽 | `test_upload_chunk_large_size` | `test_api_endpoints.py` |
+| C3 JWT 密钥 | `test_default_secret_is_insecure` | `test_jwt_service.py` |
+| H1 输入验证 | `test_md5_format_validation` | `test_api_endpoints.py` |
+| H2 合并竞态 | `test_merge_chunks_missing_chunk_raises_error` | `test_upload_service.py` |
+| H3 响应验证 | `test_API 错误时应显示错误信息` | `FileUpload.test.tsx` |
+| H4 恢复竞态 | `test_恢复上传时不应依赖 setTimeout` | `FileUpload.test.tsx` |
+| 认证安全 | `test_login_*`, `test_*_no_auth`, `test_*_invalid_token` | `test_api_endpoints.py` |
+| 输入验证 | `test_md5_format_validation`, `test_chunk_index_validation` | `test_api_endpoints.py` |
+| 错误处理 | `test_404_handler`, `test_405_handler`, `test_invalid_json_body` | `test_api_endpoints.py` |
+
+### 运行测试
+
+```bash
+# 后端单元测试
+cd backend
+pip install pytest pytest-asyncio
+pytest tests/unit/ -v
+
+# 前端组件测试
+cd frontend
+npm test
+
+# E2E 测试（需要启动服务）
+cd frontend
+npx playwright install
+npx playwright test
+```
+
+---
+
 ## 附录：其他发现（未验证）
 
 以下为扫描阶段发现但未进入最终验证的候选问题，供参考：
