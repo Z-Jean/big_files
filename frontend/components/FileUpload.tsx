@@ -180,11 +180,8 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
           continue;
         }
 
-        // 检查是否暂停
+        // 检查是否暂停（状态已被 handlePause 设置为 paused）
         if (isPausedRef.current) {
-          setUploadQueue(prev => prev.map(i =>
-            i.file === file ? { ...i, status: 'paused' } : i
-          ));
           return;
         }
 
@@ -351,6 +348,12 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const handlePause = () => {
     isPausedRef.current = true;
     setIsPaused(true);
+
+    // 立即更新当前正在上传的文件状态为 paused
+    setUploadQueue(prev => prev.map(item =>
+      item.status === 'uploading' ? { ...item, status: 'paused' } : item
+    ));
+
     abortControllerRef.current?.abort();
   };
 
