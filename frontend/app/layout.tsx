@@ -6,7 +6,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: '大文件上传系统',
+  title: '大文件上传平台',
   description: '企业级大文件分片上传系统',
 };
 
