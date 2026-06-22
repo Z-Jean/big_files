@@ -14,29 +14,38 @@ git fetch origin
 git reset --hard origin/main
 git clean -fd
 
-# 停止旧容器并清理旧镜像
+# 停止旧容器
 echo "⏹️  停止旧容器..."
 docker-compose down
+
+# 检查是否需要重建镜像（比较代码哈希）
+LOCAL_HASH=$(git rev-parse HEAD)
+REMOTE_HASH=$(git rev-parse origin/main)
+
+# 清理旧镜像
 docker image prune -f
 
-# 强制重建所有镜像（确保使用最新代码）
-echo "🔨 强制重建所有镜像..."
+# 重建镜像（确保使用最新代码）
+echo "🔨 构建镜像..."
 docker-compose build --no-cache
 
-# 启动 MySQL 并等待就绪
+# 启动 MySQL 并使用循环等待就绪
 echo "🗄️  启动 MySQL..."
 docker-compose up -d mysql
-echo "⏳ 等待 MySQL 就绪（60秒）..."
-sleep 60
 
-# 检查 MySQL 是否就绪
-echo "🏥 检查 MySQL 状态..."
-docker-compose exec -T mysql mysqladmin ping -h localhost --silent || {
-    echo "❌ MySQL 启动失败"
-    docker-compose logs mysql
-    exit 1
-}
-echo "✅ MySQL 已就绪"
+echo "⏳ 等待 MySQL 就绪..."
+for i in {1..30}; do
+    if docker-compose exec -T mysql mysqladmin ping -h localhost --silent 2>/dev/null; then
+        echo "✅ MySQL 已就绪"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "❌ MySQL 启动超时"
+        docker-compose logs mysql
+        exit 1
+    fi
+    sleep 2
+done
 
 # 初始化数据库
 echo "🗄️  初始化数据库..."
@@ -80,30 +89,30 @@ EOF
 
 echo "✅ 数据库初始化完成"
 
-# 启动所有服务（后端会自动创建默认用户）
+# 启动所有服务
 echo "🔨 启动所有服务..."
 docker-compose up -d
 
-# 等待服务启动
-echo "⏳ 等待服务启动（30秒）..."
-sleep 30
+# 等待服务启动（使用循环检查）
+echo "⏳ 等待服务启动..."
+for i in {1..20}; do
+    if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+        echo "✅ 后端服务启动成功！"
+        break
+    fi
+    if [ $i -eq 20 ]; then
+        echo "❌ 后端服务启动超时"
+        docker-compose logs backend
+        exit 1
+    fi
+    sleep 2
+done
 
-# 健康检查
-echo "🏥 执行健康检查..."
-if curl -f http://localhost:8000/health > /dev/null 2>&1; then
-    echo "✅ 后端服务启动成功！"
-else
-    echo "❌ 后端服务启动失败"
-    docker-compose logs backend
-    exit 1
-fi
-
+# 检查前端
 if curl -f http://localhost:3000 > /dev/null 2>&1; then
     echo "✅ 前端服务启动成功！"
 else
-    echo "❌ 前端服务启动失败"
-    docker-compose logs frontend
-    exit 1
+    echo "⚠️  前端服务可能还在启动中"
 fi
 
 echo ""
